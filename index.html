@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SmartRoute: best order for many stops, gas on your way, pick your bridge</title>
+<meta name="description" content="Free map helper: put 10 stops in the fastest order, find the next gas or rest area right on your highway, and choose your own way (Tappan Zee, GWB, Verrazzano). Plus StepFree, a map for strollers and wheelchairs.">
+<meta name="theme-color" content="#0b5cff">
+<meta property="og:title" content="SmartRoute">
+<meta property="og:description" content="Many stops in the best order, gas on your way, choose your bridge. Opens in Google Maps or Waze.">
+<meta property="og:image" content="og.png">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./" aria-label="SmartRoute home"><span class="logo" aria-hidden="true">➜</span> SmartRoute</a>
+  <span class="beta">v1 · free</span>
+</header>
+<div id="map" role="region" aria-label="Map"></div>
+<main id="panel">
+  <!-- STOPS -->
+  <section id="tab-stops" class="tab" aria-labelledby="h-stops">
+    <h1 id="h-stops">Many stops, best order</h1>
+    <p class="hint">Type or paste your addresses, one per line. I find the fastest order.</p>
+    <label class="lbl" for="stops-start">Start from</label>
+    <div class="row">
+      <input id="stops-start" class="inp" placeholder="Address, or tap 📍" autocomplete="street-address">
+      <button class="btn icon" id="stops-start-gps" type="button" aria-label="Use my location">📍</button>
+    </div>
+    <label class="lbl" for="stops-list">Stops (up to 25)</label>
+    <textarea id="stops-list" class="inp" rows="7" placeholder="123 Main St, Monroe NY&#10;Walmart, Central Valley NY&#10;..."></textarea>
+    <fieldset class="seg" id="stops-end">
+      <legend class="lbl">At the end</legend>
+      <label><input type="radio" name="endmode" value="round" checked> Back to start</label>
+      <label><input type="radio" name="endmode" value="open"> End anywhere</label>
+      <label><input type="radio" name="endmode" value="last"> End at last stop</label>
+    </fieldset>
+    <button class="btn big primary" id="stops-go" type="button">Find the best order</button>
+    <div id="stops-status" class="status" role="status" aria-live="polite"></div>
+    <div id="stops-result"></div>
+  </section>
+
+  <!-- ROUTE -->
+  <section id="tab-route" class="tab" hidden aria-labelledby="h-route">
+    <h1 id="h-route">Choose your way</h1>
+    <label class="lbl" for="rt-from">From</label>
+    <div class="row">
+      <input id="rt-from" class="inp" placeholder="Address, or tap 📍" autocomplete="street-address">
+      <button class="btn icon" id="rt-from-gps" type="button" aria-label="Use my location">📍</button>
+    </div>
+    <label class="lbl" for="rt-to">To</label>
+    <div class="row">
+      <input id="rt-to" class="inp" placeholder="e.g. Brooklyn, NY" autocomplete="street-address">
+      <button class="btn icon" id="rt-swap" type="button" aria-label="Swap from and to">⇅</button>
+    </div>
+    <button class="btn big primary" id="rt-go" type="button">Show my route options</button>
+    <div id="rt-status" class="status" role="status" aria-live="polite"></div>
+    <div id="rt-options"></div>
+    <div id="rt-myway" hidden>
+      <div class="card soft">
+        <div class="row between">
+          <strong>Pick my own way</strong>
+          <button class="btn small" id="rt-pick" type="button" aria-pressed="false">✋ Tap map to add a point</button>
+        </div>
+        <p class="hint" id="rt-pick-hint">Turn this on, then tap any road on the map. The route will go through it. You can add several points and drag them.</p>
+        <div class="row gap">
+          <button class="btn small" id="rt-undo" type="button" disabled>↶ Undo</button>
+          <button class="btn small" id="rt-clear" type="button" disabled>Clear my points</button>
+        </div>
+      </div>
+      <div class="row gap wrap open-row">
+        <a class="btn big primary grow" id="rt-gmaps" target="_blank" rel="noopener">Open in Google Maps</a>
+        <a class="btn big grow" id="rt-waze" target="_blank" rel="noopener">Waze</a>
+      </div>
+      <h2 class="h2">On my way</h2>
+      <div class="row gap">
+        <button class="btn big grow gas" id="rt-gas" type="button">⛽ Next gas</button>
+        <button class="btn big grow" id="rt-rest" type="button">🅿️ Next rest area</button>
+      </div>
+      <div id="rt-stop-status" class="status" role="status" aria-live="polite"></div>
+      <div id="rt-stop-card"></div>
+      <div id="rt-more"></div>
+    </div>
+  </section>
+
+  <!-- STEPFREE -->
+  <section id="tab-stepfree" class="tab" hidden aria-labelledby="h-sf">
+    <h1 id="h-sf">StepFree <small>Brooklyn</small></h1>
+    <p class="hint">Places for strollers and wheelchairs. Tap a dot to see details.</p>
+    <div class="chips" id="sf-chips" role="group" aria-label="Show on map">
+      <button class="chip on" data-k="yes" type="button"><i class="dot g"></i>Accessible</button>
+      <button class="chip on" data-k="limited" type="button"><i class="dot o"></i>Partly</button>
+      <button class="chip on" data-k="no" type="button"><i class="dot r"></i>Not accessible</button>
+      <button class="chip on" data-k="elevator" type="button"><i class="dot b"></i>Elevators</button>
+      <button class="chip on" data-k="subway" type="button"><i class="dot s"></i>Subway</button>
+      <button class="chip on" data-k="report" type="button"><i class="dot p"></i>Community reports</button>
+    </div>
+    <div class="row gap wrap">
+      <button class="btn big grow primary" id="sf-report-btn" type="button">⚠️ Report a problem / add a spot</button>
+      <button class="btn grow" id="sf-live" type="button">↻ Load latest for this area</button>
+    </div>
+    <div id="sf-status" class="status" role="status" aria-live="polite"></div>
+    <form id="sf-form" class="card" hidden>
+      <h2 class="h2">Report a problem or add a spot</h2>
+      <p class="hint" id="sf-loc-hint">📍 Location: tap the map to move the purple pin.</p>
+      <label class="lbl" for="sf-kind">What is it?</label>
+      <select id="sf-kind" class="inp" required>
+        <option value="elevator_broken">Elevator broken</option>
+        <option value="no_ramp">No ramp / steps only</option>
+        <option value="blocked_path">Sidewalk or curb cut blocked</option>
+        <option value="accessible_entrance">Step-free entrance here</option>
+        <option value="accessible_bathroom">Accessible bathroom here</option>
+        <option value="step_free_route">Good step-free way</option>
+        <option value="other">Other</option>
+      </select>
+      <label class="lbl" for="sf-place">Place name (optional)</label>
+      <input id="sf-place" class="inp" maxlength="150" placeholder="e.g. Atlantic Av station, north elevator">
+      <label class="lbl" for="sf-note">Details</label>
+      <textarea id="sf-note" class="inp" rows="3" maxlength="600" placeholder="What's wrong, or what works?"></textarea>
+      <label class="lbl" for="sf-email">Email (optional, not shown)</label>
+      <input id="sf-email" class="inp" type="email" maxlength="150" autocomplete="email">
+      <input id="sf-website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <div class="row gap">
+        <button class="btn big primary grow" type="submit">Send report</button>
+        <button class="btn big" type="button" id="sf-cancel">Cancel</button>
+      </div>
+      <p class="hint" id="sf-form-status" role="status" aria-live="polite"></p>
+    </form>
+    <p class="fine">Map data © OpenStreetMap contributors (ODbL). Accessibility tags come from OpenStreetMap volunteers and can be out of date. Purple pins are new community reports from this app, not checked by anyone yet.</p>
+  </section>
+
+  <!-- SETTINGS -->
+  <section id="tab-settings" class="tab" hidden aria-labelledby="h-set">
+    <h1 id="h-set">My settings</h1>
+    <p class="hint">Saved only on this phone. Nothing is forced: you still pick the way each trip.</p>
+    <label class="lbl" for="set-home">Home address</label>
+    <input id="set-home" class="inp" placeholder="Your home address" autocomplete="street-address">
+    <label class="lbl" for="set-default">Pre-select this crossing when it fits the trip</label>
+    <select id="set-default" class="inp"></select>
+    <fieldset class="checks" id="set-avoid"><legend class="lbl">Warn me about routes using</legend></fieldset>
+    <h2 class="h2">Add my own crossing or point</h2>
+    <p class="hint">A bridge, tunnel or road you like. It shows up as a route option.</p>
+    <input id="set-custom-name" class="inp" placeholder="Name, e.g. Newburgh-Beacon Bridge" maxlength="60">
+    <input id="set-custom-addr" class="inp" placeholder="Address or lat,lon of a point on it">
+    <button class="btn" id="set-custom-add" type="button">Add</button>
+    <ul id="set-custom-list" class="plain"></ul>
+    <button class="btn big primary" id="set-save" type="button">Save</button>
+    <p id="set-status" class="status" role="status" aria-live="polite"></p>
+    <h2 class="h2">About</h2>
+    <p class="fine">SmartRoute is a free v1. Routes: OSRM public server. Addresses: US Census geocoder, Photon and Nominatim. Map, gas stations, rest areas and accessibility data: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>. Times are without live traffic. There is no free live gas-price feed, so prices are coming in v2. SmartRoute is not connected to Google, Waze or any gas brand. <a href="privacy.html">Privacy</a></p>
+  </section>
+</main>
+<nav class="tabbar" aria-label="Sections">
+  <button class="tb on" data-tab="stops" type="button"><span aria-hidden="true">🔢</span>Stops</button>
+  <button class="tb" data-tab="route" type="button"><span aria-hidden="true">🛣️</span>Route</button>
+  <button class="tb" data-tab="stepfree" type="button"><span aria-hidden="true">♿</span>StepFree</button>
+  <button class="tb" data-tab="settings" type="button"><span aria-hidden="true">⚙️</span>Settings</button>
+</nav>
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
