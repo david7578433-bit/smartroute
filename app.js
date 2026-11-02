@@ -186,11 +186,27 @@ function streetMatches(typed, p) {
   var got = norm(p.street);
   return want.length ? want.some(function (w) { return got.indexOf(w) >= 0; }) && (!p.housenumber || String(p.housenumber).toLowerCase() === m[1].toLowerCase()) : true;
 }
+/* ---------- pinned places from other apps: "Name · street address @lat,lon" (exact spot, readable name) ---------- */
+function pinned(text) {
+  var m = String(text || "").match(/^(.*?)\s*@\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/);
+  if (!m || !m[1].trim()) return null;
+  var t = m[1].trim(), cut = t.lastIndexOf(" · ");
+  var name = cut > 0 ? t.slice(0, cut).trim() : t, addr = cut > 0 ? t.slice(cut + 3).trim() : "";
+  return { lat: +m[2], lon: +m[3], typed: name, label: addr || name, gq: addr ? name + ", " + addr : name, pinned: true };
+}
+// Show "Name · address" in the box and keep the exact spot for it on this phone.
+function unpin(line) {
+  var p = pinned(line); if (!p) return line;
+  var shown = line.replace(/\s*@\s*-?\d{1,2}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/, "").trim();
+  try { localStorage.setItem(GKEY + shown.toLowerCase(), JSON.stringify(p)); } catch (e) {}
+  return shown;
+}
 async function geocode(text, bias) {
   text = String(text || "").trim();
   if (!text) throw new Error("Empty address");
   var mm = text.match(/^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/);
   if (mm) return { lat: +mm[1], lon: +mm[2], label: text, coords: true };
+  var at = pinned(text); if (at) return at;
   var ck = GKEY + text.toLowerCase();
   try { var hit = JSON.parse(localStorage.getItem(ck)); if (hit) return hit; } catch (e) {}
   var res = null, approx = null;
@@ -278,7 +294,7 @@ async function osrmTable(pts, sources, dests) {
 function routeLine(rt) { return rt.geometry.coordinates.map(function (c) { return [c[1], c[0]]; }); }
 
 /* ---------- Google Maps / Waze links ---------- */
-function gPlace(p) { return (p.gps || p.coords || p.approx || p.via || !(p.typed || p.label)) ? (p.lat.toFixed(6) + "," + p.lon.toFixed(6)) : (p.typed || p.label); }
+function gPlace(p) { if (p.gq && !p.approx) return p.gq; return (p.gps || p.coords || p.approx || p.via || !(p.typed || p.label)) ? (p.lat.toFixed(6) + "," + p.lon.toFixed(6)) : (p.typed || p.label); }
 function gmapsDir(origin, dest, ways) {
   var u = "https://www.google.com/maps/dir/?api=1&travelmode=driving";
   if (origin && !origin.gps) u += "&origin=" + encodeURIComponent(gPlace(origin));
@@ -971,14 +987,19 @@ $("set-save").addEventListener("click", function () {
   var stops = params.get("stops");
   var tab = (location.hash || "").replace("#", "");
   if (stops) {
-    $("stops-list").value = stops.split("|").map(function (s) { return s.trim(); }).filter(Boolean).join("\n");
-    if (params.get("start")) $("stops-start").value = params.get("start");
+    $("stops-list").value = stops.split("|").map(function (s) { return unpin(s.trim()); }).filter(Boolean).join("\n");
+    var sp = params.get("start");
+    if (sp) {
+      var spin = pinned(sp);
+      if (spin && /^my location$/i.test(spin.typed)) { $("stops-start").value = "My location"; $("stops-start").dataset.gps = spin.lat + "," + spin.lon; }
+      else $("stops-start").value = unpin(sp);
+    }
     var end = params.get("end"); if (end) { var r = document.querySelector('input[name="endmode"][value="' + end + '"]'); if (r) r.checked = true; }
     showTab("stops");
     if (params.get("start") || settings.home) runStops();
   } else if (params.get("to")) {
-    if (params.get("from")) $("rt-from").value = params.get("from");
-    $("rt-to").value = params.get("to"); showTab("route"); runRoute();
+    if (params.get("from")) $("rt-from").value = unpin(params.get("from"));
+    $("rt-to").value = unpin(params.get("to")); showTab("route"); runRoute();
   } else if (["stops", "route", "stepfree", "settings"].indexOf(tab) >= 0) showTab(tab);
   else showTab("stops");
 })();
