@@ -1,6 +1,7 @@
 // SmartRoute: tiny Worker. Stores StepFree community reports (D1, binding DB),
 // proxies the free US Census address geocoder (no key) and serves the static app.
-const ADMIN_KEY_SHA256 = "1f6c9031ede1d9062ebd7354517d0a53734539b8eaf2ffd7424bf519cf26d86b";
+// Admin key: put the SHA-256 (hex) of YOUR admin key here before deploying (printf '%s' KEY | sha256sum). Not stored on GitHub.
+const ADMIN_KEY_SHA256 = "0000000000000000000000000000000000000000000000000000000000000000";
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type, x-admin-key", "access-control-max-age": "86400" };
 const J = (obj, status = 200, extra = {}) => new Response(JSON.stringify(obj), {
   status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...CORS, ...extra }
